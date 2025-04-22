@@ -13,6 +13,7 @@ enum Placement {
     PLACEMENT_CLEAR,
     PLACEMENT_X,
     PLACEMENT_O,
+    PLACEMENT_DRAW,
 };
 
 Placement global_current_placement = PLACEMENT_X;
@@ -44,12 +45,12 @@ void enlarge_rec(Rectangle &r, float amount) {
 
 Placement check_win(Grid *grid, int *sx, int *sy, int *ex, int *ey) {
     assert(sx && sy && ex && ey);
-
+    
     // Check rows
     for (int y = 0; y < H; y++) {
         Placement result = grid->array[y][0];
 
-        if (result == PLACEMENT_CLEAR) continue;
+        if (result == PLACEMENT_CLEAR || result == PLACEMENT_DRAW) continue;
 
         bool found = true;
 
@@ -74,7 +75,7 @@ Placement check_win(Grid *grid, int *sx, int *sy, int *ex, int *ey) {
     for (int x = 0; x < W; x++) {
         Placement result = grid->array[0][x];
 
-        if (result == PLACEMENT_CLEAR) continue;
+        if (result == PLACEMENT_CLEAR || result == PLACEMENT_DRAW) continue;
 
         bool found = true;
 
@@ -107,7 +108,7 @@ Placement check_win(Grid *grid, int *sx, int *sy, int *ex, int *ey) {
 
         bool found = true;
 
-        if (result == PLACEMENT_CLEAR) {
+        if (result == PLACEMENT_CLEAR || result == PLACEMENT_DRAW) {
             leading--;
             continue;
         }
@@ -146,15 +147,29 @@ Placement check_win(Grid *grid, int *sx, int *sy, int *ex, int *ey) {
         leading--;
     } while (leading >= 0);
 
+    // Check for draw
+    int count = 0;
+
+    for (int y = 0; y < H; y++) {
+        for (int x = 0; x < W; x++) {
+            if (grid->array[y][x]) count++;
+        }
+    }
+
+    if (count == 9) return PLACEMENT_DRAW;
+
     return PLACEMENT_CLEAR; // nobody won
 }
 
 void win_grid(Grid *grid, Placement winner, int sx, int sy, int ex, int ey) {
     grid->won = winner;
-    grid->win_line_start.x = grid->pos.x + (sx + 0.5f) * grid->size / 3.f;
-    grid->win_line_start.y = grid->pos.y + (sy + 0.5f) * grid->size / 3.f;
-    grid->win_line_end.x   = grid->pos.x + (ex + 0.5f) * grid->size / 3.f;
-    grid->win_line_end.y   = grid->pos.y + (ey + 0.5f) * grid->size / 3.f;
+
+    if (winner != PLACEMENT_DRAW) {
+        grid->win_line_start.x = grid->pos.x + (sx + 0.5f) * grid->size / 3.f;
+        grid->win_line_start.y = grid->pos.y + (sy + 0.5f) * grid->size / 3.f;
+        grid->win_line_end.x   = grid->pos.x + (ex + 0.5f) * grid->size / 3.f;
+        grid->win_line_end.y   = grid->pos.y + (ey + 0.5f) * grid->size / 3.f;
+    }
 }
 
 bool update_grid(Grid *grid) {
@@ -203,34 +218,48 @@ bool update_grid(Grid *grid) {
 void draw_placement(Grid *grid, int x, int y, Placement p, uint8_t alpha) {
     Vector2 pos = grid->pos;
 
-    pos.x += x * grid->size / 3;
-    pos.y += y * grid->size / 3;
-
-    pos.x += grid->size / 6;
-    pos.y += grid->size / 6;
+    pos.x += (x + 0.5f) * grid->size / 3;
+    pos.y += (y + 0.5f) * grid->size / 3;
 
     float size = grid->size / 8.f;
 
-    if (p == PLACEMENT_X) {
-        Color c = PINK;
+    switch (p) {
+        case PLACEMENT_DRAW: {
+            Color c = GRAY;
 
-        c.a = alpha;
+            c.a = alpha;
 
-        DrawLineEx({pos.x - size, pos.y - size},
-                   {pos.x + size, pos.y + size},
-                   2,
-                   c);
-        DrawLineEx({pos.x + size, pos.y - size},
-                   {pos.x - size, pos.y + size},
-                   2,
-                   c);
-    } else if (p == PLACEMENT_O) {
-        Color c = BLUE;
+            DrawLineEx({pos.x - size, pos.y - size/2},
+                       {pos.x + size, pos.y - size/2},
+                       4,
+                       c);
+            DrawLineEx({pos.x - size, pos.y + size/2},
+                       {pos.x + size, pos.y + size/2},
+                       4,
+                       c);
+        } break;
+        case PLACEMENT_X: {
+            Color c = PINK;
 
-        c.a = alpha;
+            c.a = alpha;
 
-        DrawCircleLinesV(pos, size+0, c);
-        DrawCircleLinesV(pos, size-1, c);
+            DrawLineEx({pos.x - size, pos.y - size},
+                       {pos.x + size, pos.y + size},
+                       2,
+                       c);
+            DrawLineEx({pos.x + size, pos.y - size},
+                       {pos.x - size, pos.y + size},
+                       2,
+                       c);
+        } break;
+        case PLACEMENT_O: {
+            Color c = BLUE;
+
+            c.a = alpha;
+
+            DrawCircleLinesV(pos, size+0, c);
+            DrawCircleLinesV(pos, size-1, c);
+        } break;
     }
 }
 
@@ -262,14 +291,17 @@ void draw_grid(Grid *grid, Color color, bool is_total_grid) {
     }
 
     if (grid->won) {
-        Color c = PINK;
+        if (grid->won == PLACEMENT_DRAW) {
+        } else {
+            Color c = PINK;
 
-        if (grid->won == PLACEMENT_O)
-            c = BLUE;
+            if (grid->won == PLACEMENT_O)
+                c = BLUE;
 
-        c.a = alpha;
+            c.a = alpha;
 
-        DrawLineEx(grid->win_line_start, grid->win_line_end, 7, c);
+            DrawLineEx(grid->win_line_start, grid->win_line_end, 7, c);
+        }
     } else if (grid->select_x != -1 && grid->select_y != -1) {
         int x = grid->select_x;
         int y = grid->select_y;
@@ -300,10 +332,8 @@ int main(void) {
     game.total_grid.select_x = game.total_grid.select_y = -1;
 
     SetTraceLogLevel(LOG_ERROR);
-    SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_WINDOW_MAXIMIZED);
+    SetConfigFlags(FLAG_VSYNC_HINT);
     InitWindow(width, height, "Super TicTacToe");
-
-    SetTargetFPS(60);
 
     while (!WindowShouldClose()) {
         if (!global_winner) { // Update
@@ -349,7 +379,9 @@ end:
                         win_grid(&game.total_grid, result, sx, sy, ex, ey);
                         global_winner = result;
 
-                        for (int i = 0; i < 3; i++)
+                        if (result == PLACEMENT_DRAW) {
+                            printf("DRAW!!!\n");
+                        } else for (int i = 0; i < 3; i++)
                             printf("%s WON!\n", global_winner == PLACEMENT_X ? "X" : "O");
                     }
                 }
